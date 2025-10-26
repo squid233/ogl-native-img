@@ -1,0 +1,1 @@
+rootProject.name = "ogl-native-img"

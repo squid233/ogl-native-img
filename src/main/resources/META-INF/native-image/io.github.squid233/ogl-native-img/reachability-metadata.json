@@ -1,0 +1,12 @@
+{
+  "foreign": {
+    "directUpcalls": [
+      {
+        "class": "io.github.squid233.test.OglNativeImg",
+        "method": "onResize",
+        "returnType": "void",
+        "parameterTypes": ["void*", "int", "int"]
+      }
+    ]
+  }
+}
