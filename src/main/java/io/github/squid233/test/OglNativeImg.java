@@ -8,8 +8,11 @@ import overrungl.util.MemoryStack;
 import overrungl.util.MemoryUtil;
 
 import java.lang.foreign.Arena;
+import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 
 import static overrungl.glfw.GLFW.*;
 import static overrungl.opengl.GL10.GL_FLOAT;
@@ -20,7 +23,7 @@ import static overrungl.opengl.GL20.GL_FRAGMENT_SHADER;
 import static overrungl.opengl.GL20.GL_VERTEX_SHADER;
 
 public class OglNativeImg {
-    GL gl;
+    static GL gl;
 
     void run() {
         if (!glfwInit()) {
@@ -41,27 +44,36 @@ public class OglNativeImg {
         glfwMakeContextCurrent(window);
         gl = new GL(GLFW::glfwGetProcAddress);
         gl.ClearColor(0.4f, 0.6f, 0.9f, 1.0f);
-        glfwSetFramebufferSizeCallback(window, GLFWFramebufferSizeFun.alloc(Arena.global(), this::onResize));
+        try {
+            glfwSetFramebufferSizeCallback(window,
+                Linker.nativeLinker().upcallStub(MethodHandles.publicLookup().findStatic(OglNativeImg.class,
+                        "onResize",
+                        MethodType.methodType(void.class, MemorySegment.class, int.class, int.class)),
+                    GLFWFramebufferSizeFun.DESCRIPTOR,
+                    Arena.global()));
+        } catch (NoSuchMethodException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
         int program = gl.CreateProgram();
         int vsh = gl.CreateShader(GL_VERTEX_SHADER);
         int fsh = gl.CreateShader(GL_FRAGMENT_SHADER);
         try (Arena arena = Arena.ofConfined()) {
             gl.ShaderSource(vsh, 1, arena.allocateFrom(ValueLayout.ADDRESS, arena.allocateFrom("""
-                    #version 330
-                    layout(location=0) in vec2 Position;
-                    layout(location=1) in vec3 Color;
-                    out vec4 vertexColor;
-                    void main() {
-                        gl_Position = vec4(Position, 0.0, 1.0);
-                        vertexColor = vec4(Color, 1.0);
-                    }""")), MemorySegment.NULL);
+                #version 330
+                layout(location=0) in vec2 Position;
+                layout(location=1) in vec3 Color;
+                out vec4 vertexColor;
+                void main() {
+                    gl_Position = vec4(Position, 0.0, 1.0);
+                    vertexColor = vec4(Color, 1.0);
+                }""")), MemorySegment.NULL);
             gl.ShaderSource(fsh, 1, arena.allocateFrom(ValueLayout.ADDRESS, arena.allocateFrom("""
-                    #version 330
-                    in vec4 vertexColor;
-                    out vec4 fragColor;
-                    void main() {
-                        fragColor = vertexColor;
-                    }""")), MemorySegment.NULL);
+                #version 330
+                in vec4 vertexColor;
+                out vec4 fragColor;
+                void main() {
+                    fragColor = vertexColor;
+                }""")), MemorySegment.NULL);
         }
         gl.CompileShader(vsh);
         gl.CompileShader(fsh);
@@ -84,9 +96,9 @@ public class OglNativeImg {
         gl.BindBuffer(GL_ARRAY_BUFFER, vbo);
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment segment = arena.allocateFrom(ValueLayout.JAVA_FLOAT,
-                    0.0f, 0.5f, 1.0f, 0.0f, 0.0f,
-                    -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
-                    0.5f, -0.5f, 0.0f, 0.0f, 1.0f);
+                0.0f, 0.5f, 1.0f, 0.0f, 0.0f,
+                -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+                0.5f, -0.5f, 0.0f, 0.0f, 1.0f);
             gl.BufferData(GL_ARRAY_BUFFER, segment.byteSize(), segment, GL_STATIC_DRAW);
         }
         gl.EnableVertexAttribArray(0);
@@ -109,7 +121,7 @@ public class OglNativeImg {
         glfwTerminate();
     }
 
-    void onResize(MemorySegment window, int width, int height) {
+    public static void onResize(MemorySegment window, int width, int height) {
         gl.Viewport(0, 0, width, height);
     }
 
